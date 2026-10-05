@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+
 import 'database_helper.dart';
 import 'shared_budget_page.dart';
 import 'shared_budget_service.dart';
@@ -8,10 +9,10 @@ import 'tcmb_rates_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SharedBudgetService.initialize();
-  SharedBudgetService.activeHouseholdId =
-      await DatabaseHelper.instance.getActiveHouseholdId();
-  SharedBudgetService.sharedModeEnabled =
-      await DatabaseHelper.instance.isSharedModeEnabled();
+  SharedBudgetService.activeHouseholdId = await DatabaseHelper.instance
+      .getActiveHouseholdId();
+  SharedBudgetService.sharedModeEnabled = await DatabaseHelper.instance
+      .isSharedModeEnabled();
   runApp(const FinansApp());
 }
 
@@ -408,6 +409,7 @@ class _RootPageState extends State<RootPage> {
   int currentTab = 0;
 
   bool isLoading = true;
+  String? _loadError;
   bool _startupRatesChecked = false;
 
   DateTime selectedMonth = DateTime(DateTime.now().year, DateTime.now().month);
@@ -547,33 +549,44 @@ class _RootPageState extends State<RootPage> {
   // ==========================================================
 
   Future<void> loadAll() async {
-    final expenseData = await DatabaseHelper.instance.getExpenses();
-    final incomeData = await DatabaseHelper.instance.getIncomes();
-    final installmentData = await DatabaseHelper.instance.getInstallments();
-    final investmentData = await DatabaseHelper.instance.getInvestments();
+    try {
+      final data = await Future.wait<List<Map<String, dynamic>>>([
+        DatabaseHelper.instance.getExpenses(),
+        DatabaseHelper.instance.getIncomes(),
+        DatabaseHelper.instance.getInstallments(),
+        DatabaseHelper.instance.getInvestments(),
+      ]).timeout(const Duration(seconds: 15));
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    await SharedBudgetService.updateRealtimeSubscription(() {
-      if (mounted) loadAll();
-    });
+      await SharedBudgetService.updateRealtimeSubscription(() {
+        if (mounted) loadAll();
+      });
 
-    setState(() {
-      expenses = expenseData.map((item) => Expense.fromMap(item)).toList();
-      incomes = incomeData.map((item) => Income.fromMap(item)).toList();
-      installments = installmentData
-          .map((item) => Installment.fromMap(item))
-          .toList();
-      investments = investmentData
-          .map((item) => Investment.fromMap(item))
-          .toList();
-      isLoading = false;
-    });
+      setState(() {
+        expenses = data[0].map((item) => Expense.fromMap(item)).toList();
+        incomes = data[1].map((item) => Income.fromMap(item)).toList();
+        installments = data[2]
+            .map((item) => Installment.fromMap(item))
+            .toList();
+        investments = data[3].map((item) => Investment.fromMap(item)).toList();
+        isLoading = false;
+        _loadError = null;
+      });
 
-    if (!_startupRatesChecked && investments.isNotEmpty) {
-      _startupRatesChecked = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _updateInvestmentRatesOncePerDay();
+      if (!_startupRatesChecked && investments.isNotEmpty) {
+        _startupRatesChecked = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _updateInvestmentRatesOncePerDay();
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+        _loadError = SharedBudgetService.hasActiveSharedBudget
+            ? 'Ortak bütçe verileri yüklenemedi. İnternet bağlantısını kontrol edip tekrar deneyin.'
+            : 'Veriler yüklenemedi. Tekrar deneyin.';
       });
     }
   }
@@ -646,13 +659,36 @@ class _RootPageState extends State<RootPage> {
   Future<void> addExpense() async {
     final result = await Navigator.push<Expense>(
       context,
-      MaterialPageRoute(builder: (context) => const AddExpensePage()),
+      MaterialPageRoute(
+        builder: (context) => AddExpensePage(
+          onSave: (expense) async {
+            await DatabaseHelper.instance.insertExpense(expense.toMap());
+          },
+        ),
+      ),
     );
 
     if (result == null) return;
 
-    await DatabaseHelper.instance.insertExpense(result.toMap());
-    await loadAll();
+    final expenseDate = DateTime.tryParse(result.date);
+    if (expenseDate != null && mounted) {
+      setState(() {
+        selectedMonth = DateTime(expenseDate.year, expenseDate.month);
+        currentTab = 0;
+      });
+    }
+    try {
+      await loadAll();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Harcama kaydedildi ancak liste yenilenemedi. Aşağı çekerek yenileyin.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> editExpense(Expense expense) async {
@@ -1208,16 +1244,32 @@ class _RootPageState extends State<RootPage> {
       appBar: AppBar(title: const Text('Açıcı Budget')),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : IndexedStack(
-              index: currentTab,
+          : Column(
               children: [
-                buildOverviewTab(),
-                buildInstallmentsTab(),
-                buildInvestmentsTab(),
-                SharedBudgetPage(
-                  initialInviteCode: widget.inviteCode,
-                  onSharedBudgetChanged: loadAll,
-                  onBack: () => setState(() => currentTab = 0),
+                if (_loadError != null)
+                  MaterialBanner(
+                    content: Text(_loadError!),
+                    actions: [
+                      TextButton(
+                        onPressed: loadAll,
+                        child: const Text('Tekrar dene'),
+                      ),
+                    ],
+                  ),
+                Expanded(
+                  child: IndexedStack(
+                    index: currentTab,
+                    children: [
+                      buildOverviewTab(),
+                      buildInstallmentsTab(),
+                      buildInvestmentsTab(),
+                      SharedBudgetPage(
+                        initialInviteCode: widget.inviteCode,
+                        onSharedBudgetChanged: loadAll,
+                        onBack: () => setState(() => currentTab = 0),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1236,10 +1288,7 @@ class _RootPageState extends State<RootPage> {
             icon: Icon(Icons.trending_up),
             label: 'Yatırımlar',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.groups),
-            label: 'Ortak',
-          ),
+          NavigationDestination(icon: Icon(Icons.groups), label: 'Ortak'),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
