@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Açıcı Budget (Supabase)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--dart-define=SUPABASE_URL=https://waceyyqnjdxsgcpsjloz.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=sb_publishable_V8Ik6RxK38osJxrR8NAwqg_ToqCBELd"
+      ]
+    }
+  ]
+}
