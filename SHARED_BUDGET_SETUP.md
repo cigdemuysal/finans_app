@@ -8,7 +8,8 @@ devam eder. Ortak bütçeyi açmak için:
    SQL Editor'de çalıştırın. Yeni kurulumda önce
    `202609280001_shared_budgets.sql`, ardından
    `202610040001_household_member_emails.sql` ve
-   `202610040002_limit_household_invites.sql` dosyalarını çalıştırın. Mevcut
+   `202610040002_limit_household_invites.sql` ve
+   `202610120001_delete_own_account.sql` dosyalarını çalıştırın. Mevcut
    kurulumda yalnızca henüz çalıştırmadığınız migration dosyalarını çalıştırın.
 3. Supabase Authentication ayarlarından e-posta ile kayıt/girişi açın. E-posta
    doğrulaması etkinse **Authentication → URL Configuration → Additional
@@ -38,6 +39,8 @@ devam eder. Ortak bütçeyi açmak için:
    mükerrer kayıt oluşturmaz.
 
 Ortak bütçe etkin durumdayken gelir, gider, taksit ve yatırım kayıtları buluttan
-okunup buluta yazılır ve diğer cihazdaki değişiklikler anlık yenilenir. Çevrimdışı
-yazma ve sonradan eşitleme henüz eklenmemiştir. Kişisel kayıtlar cihazın SQLite
-veritabanında kalır.
+okunup buluta yazılır ve diğer cihazdaki değişiklikler anlık yenilenir. İnternet
+yokken ortak bütçenin son görülen hâli telefondaki kopyadan gösterilir; yapılan
+değişiklikler telefonda sıraya alınır ve bağlantı gelince (uygulama açılınca,
+öne gelince veya en geç 30 saniyede bir) sunucuya gönderilir. Kişisel kayıtlar
+cihazın SQLite veritabanında kalır.

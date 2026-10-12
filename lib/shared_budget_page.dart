@@ -289,6 +289,31 @@ class _SharedBudgetPageState extends State<SharedBudgetPage> {
   }
 
   Future<void> _signOut() async {
+    final pending = SharedBudgetService.pendingChangeCount;
+    if (pending > 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Gönderilmemiş değişiklikler var'),
+          content: Text(
+            'İnternetsizken yaptığınız $pending değişiklik henüz ortak bütçeye '
+            'gönderilmedi. Çıkış yaparsanız bu değişiklikler aynı hesapla '
+            'tekrar giriş yapana kadar bu telefonda bekler.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Vazgeç'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Yine de çıkış yap'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
     await _perform(() async {
       await SharedBudgetService.client!.auth.signOut();
       await _setActiveHousehold(null);
@@ -296,6 +321,64 @@ class _SharedBudgetPageState extends State<SharedBudgetPage> {
       if (mounted) setState(() {});
       _showMessage('Çıkış yapıldı. Kişisel kayıtlarınız cihazda duruyor.');
     });
+  }
+
+  Future<void> _deleteAccount() async {
+    final email = SharedBudgetService.client!.auth.currentUser!.email ?? '';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hesabımı sil'),
+        content: Text(
+          '$email hesabı ve sunucudaki verileriniz kalıcı olarak silinecek. '
+          'Ortak bütçede başka bir kişi varsa bütçe ve kayıtlar onda kalır; '
+          'yoksa ortak bütçe tamamen silinir.\n\n'
+          'Bu cihazdaki kişisel kayıtlarınız silinmez. Onları Ayarlar '
+          'bölümünden ayrıca silebilirsiniz.\n\nBu işlem geri alınamaz.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hesabı kalıcı olarak sil'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    try {
+      await SharedBudgetService.deleteOwnAccount();
+      await widget.onSharedBudgetChanged?.call();
+      if (!mounted) return;
+      setState(() {
+        _householdId = null;
+        _householdMemberCount = 0;
+        _otherMemberEmails = [];
+        _inviteCodeForDisplay = null;
+        _inviteLinkForDisplay = null;
+      });
+      _inviteCode.clear();
+      _email.clear();
+      _password.clear();
+      _showMessage('Hesabınız silindi.');
+    } catch (error) {
+      if (!mounted) return;
+      final message = error.toString();
+      _showMessage(
+        message.contains('delete_own_account')
+            ? 'Hesap silme sunucuda henüz etkin değil. Supabase SQL Editor’da '
+                  '202610120001_delete_own_account.sql dosyasını çalıştırın.'
+            : _friendlyError(error),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -628,5 +711,13 @@ class _SharedBudgetPageState extends State<SharedBudgetPage> {
         label: const Text('Davet koduyla katıl'),
       ),
     ],
+    const SizedBox(height: 32),
+    const Divider(),
+    TextButton.icon(
+      onPressed: _busy ? null : _deleteAccount,
+      style: TextButton.styleFrom(foregroundColor: Colors.red),
+      icon: const Icon(Icons.person_remove),
+      label: const Text('Hesabımı sil'),
+    ),
   ];
 }

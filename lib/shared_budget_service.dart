@@ -1,4 +1,10 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:math';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'database_helper.dart';
 
 /// Supabase backend for optional shared household budgets.
 ///
@@ -35,20 +41,225 @@ class SharedBudgetService {
     await Supabase.initialize(url: _url, publishableKey: _publishableKey);
   }
 
-  static Future<List<Map<String, dynamic>>> getRecords(String kind) async {
-    final householdId = _requireHousehold();
-    final rows = await client!
+  // ==========================================================
+  // ÇEVRİMDIŞI ÇALIŞMA
+  // ==========================================================
+  //
+  // İnternet yokken ortak bütçenin son görülen hâli telefondaki kopyadan
+  // gösterilir. Yeni, değişen veya silinen kayıtlar telefonda sıraya alınır ve
+  // bağlantı gelince sunucuya gönderilir.
+
+  static const _remoteTimeout = Duration(seconds: 10);
+
+  /// Son sunucu isteği internet olmadığı için başarısız olduysa true.
+  static bool isOffline = false;
+
+  /// Sunucuya henüz gönderilmemiş değişiklik sayısı.
+  static int pendingChangeCount = 0;
+
+  /// Sunucunun kabul etmediği için gönderilemeyen değişiklik sayısı.
+  /// Arayüz bunu bir kez gösterip sıfırlar.
+  static int rejectedChangeCount = 0;
+
+  static Future<void>? _syncInProgress;
+  static int _lastTempId = 0;
+  static final Map<int, int> _sentTempIds = {};
+
+  /// Hatanın internet bağlantısından kaynaklanıp kaynaklanmadığını söyler.
+  /// Sunucunun bilerek reddettiği istekler (yetki, geçersiz veri) internet
+  /// hatası sayılmaz.
+  static bool isNetworkError(Object error) {
+    if (error is AuthRetryableFetchException) return true;
+    if (error is PostgrestException || error is AuthException) return false;
+    if (error is SocketException ||
+        error is TimeoutException ||
+        error is HandshakeException) {
+      return true;
+    }
+    final text = error.toString();
+    return text.contains('SocketException') ||
+        text.contains('ClientException') ||
+        text.contains('Failed host lookup') ||
+        text.contains('Connection closed') ||
+        text.contains('Connection refused') ||
+        text.contains('Connection reset') ||
+        text.contains('Network is unreachable');
+  }
+
+  static int _nextTempId() {
+    var id = -DateTime.now().microsecondsSinceEpoch;
+    if (id >= _lastTempId) id = _lastTempId - 1;
+    _lastTempId = id;
+    return id;
+  }
+
+  static String _newClientRef() {
+    final random = Random.secure();
+    return List.generate(
+      16,
+      (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+    ).join();
+  }
+
+  static int _resolveId(int id) => _sentTempIds[id] ?? id;
+
+  static Future<void> _refreshPendingCount(String householdId) async {
+    pendingChangeCount = await DatabaseHelper.instance.countPendingOps(
+      householdId,
+    );
+  }
+
+  /// Sıradaki değişiklikleri sunucuya gönderir. İnternet yoksa sessizce durur
+  /// ve değişiklikler sırada kalır.
+  static Future<void> syncPendingChanges() {
+    return _syncInProgress ??= _syncPendingChanges().whenComplete(
+      () => _syncInProgress = null,
+    );
+  }
+
+  static Future<void> _syncPendingChanges() async {
+    if (!hasActiveSharedBudget) return;
+    final householdId = activeHouseholdId!;
+    final ops = await DatabaseHelper.instance.getPendingOps(householdId);
+    for (final op in ops) {
+      try {
+        switch (op.op) {
+          case 'insert':
+            final id = await _insertRemote(
+              householdId,
+              op.kind,
+              op.data ?? const {},
+              op.clientRef ?? _newClientRef(),
+            );
+            _sentTempIds[op.recordId] = id;
+          case 'update':
+            await _updateRemote(householdId, op.kind, op.recordId, op.data!);
+          case 'delete':
+            await _deleteRemote(householdId, op.kind, op.recordId);
+        }
+        await DatabaseHelper.instance.deletePendingOp(op.seq!);
+        isOffline = false;
+      } catch (error) {
+        if (isNetworkError(error)) {
+          isOffline = true;
+          break;
+        }
+        // Sunucu bu değişikliği kabul etmedi (ör. kayıt diğer kişi
+        // tarafından silinmiş). Tekrar denemek sonucu değiştirmez; sıranın
+        // tıkanmaması için değişiklik çıkarılır.
+        await DatabaseHelper.instance.deletePendingOp(op.seq!);
+        rejectedChangeCount++;
+      }
+    }
+    await _refreshPendingCount(householdId);
+  }
+
+  static Future<int> _insertRemote(
+    String householdId,
+    String kind,
+    Map<String, dynamic> data,
+    String clientRef,
+  ) async {
+    // Önceki bir deneme sunucuya ulaşıp cevabı alamadan kopmuş olabilir.
+    // Aynı anahtarla eklenmiş kayıt varsa tekrar eklenmez.
+    final existing = await client!
         .from('financial_records')
-        .select('id, data')
+        .select('id')
         .eq('household_id', householdId)
         .eq('kind', kind)
-        .order('created_at', ascending: false);
+        .eq('data->>_client_ref', clientRef)
+        .limit(1)
+        .timeout(_remoteTimeout);
+    if (existing.isNotEmpty) return existing.first['id'] as int;
 
-    return rows.map((row) {
-      final data = Map<String, dynamic>.from(row['data'] as Map);
-      data['id'] = row['id'] as int;
-      return data;
-    }).toList();
+    final row = await client!
+        .from('financial_records')
+        .insert({
+          'household_id': householdId,
+          'kind': kind,
+          'data': {...data, '_client_ref': clientRef},
+        })
+        .select('id')
+        .single()
+        .timeout(_remoteTimeout);
+    return row['id'] as int;
+  }
+
+  static Future<int> _updateRemote(
+    String householdId,
+    String kind,
+    int id,
+    Map<String, dynamic> data,
+  ) async {
+    final rows = await client!
+        .from('financial_records')
+        .update({'data': data})
+        .eq('household_id', householdId)
+        .eq('kind', kind)
+        .eq('id', id)
+        .select('id')
+        .timeout(_remoteTimeout);
+    return rows.length;
+  }
+
+  static Future<int> _deleteRemote(
+    String householdId,
+    String kind,
+    int id,
+  ) async {
+    final rows = await client!
+        .from('financial_records')
+        .delete()
+        .eq('household_id', householdId)
+        .eq('kind', kind)
+        .eq('id', id)
+        .select('id')
+        .timeout(_remoteTimeout);
+    return rows.length;
+  }
+
+  // ==========================================================
+  // KAYITLAR
+  // ==========================================================
+
+  static Future<List<Map<String, dynamic>>> getRecords(String kind) async {
+    final householdId = _requireHousehold();
+    await syncPendingChanges();
+
+    List<Map<String, dynamic>> records;
+    try {
+      final rows = await client!
+          .from('financial_records')
+          .select('id, data')
+          .eq('household_id', householdId)
+          .eq('kind', kind)
+          .order('created_at', ascending: false)
+          .timeout(_remoteTimeout);
+
+      records = rows.map((row) {
+        final data = Map<String, dynamic>.from(row['data'] as Map)
+          ..remove('_client_ref');
+        data['id'] = row['id'] as int;
+        return data;
+      }).toList();
+      isOffline = false;
+      await DatabaseHelper.instance.replaceSharedCache(
+        householdId,
+        kind,
+        records,
+      );
+    } catch (error) {
+      if (!isNetworkError(error)) rethrow;
+      isOffline = true;
+      records = await DatabaseHelper.instance.getSharedCache(householdId, kind);
+    }
+
+    final pending = await DatabaseHelper.instance.getPendingOps(
+      householdId,
+      kind: kind,
+    );
+    await _refreshPendingCount(householdId);
+    return applyPendingOps(records, pending);
   }
 
   static Future<int> insertRecord(
@@ -56,12 +267,30 @@ class SharedBudgetService {
     Map<String, dynamic> data,
   ) async {
     final householdId = _requireHousehold();
-    final row = await client!
-        .from('financial_records')
-        .insert({'household_id': householdId, 'kind': kind, 'data': data})
-        .select('id')
-        .single();
-    return row['id'] as int;
+    final clientRef = _newClientRef();
+    await syncPendingChanges();
+    if (pendingChangeCount == 0) {
+      try {
+        return await _insertRemote(householdId, kind, data, clientRef);
+      } catch (error) {
+        if (!isNetworkError(error)) rethrow;
+        isOffline = true;
+      }
+    }
+
+    final tempId = _nextTempId();
+    await DatabaseHelper.instance.addPendingOp(
+      PendingSharedOp(
+        householdId: householdId,
+        kind: kind,
+        op: 'insert',
+        recordId: tempId,
+        data: data,
+        clientRef: clientRef,
+      ),
+    );
+    await _refreshPendingCount(householdId);
+    return tempId;
   }
 
   static Future<int> updateRecord(
@@ -70,26 +299,75 @@ class SharedBudgetService {
     Map<String, dynamic> data,
   ) async {
     final householdId = _requireHousehold();
-    final rows = await client!
-        .from('financial_records')
-        .update({'data': data})
-        .eq('household_id', householdId)
-        .eq('kind', kind)
-        .eq('id', id)
-        .select('id');
-    return rows.length;
+    id = _resolveId(id);
+    if (id < 0) {
+      // Kayıt henüz sunucuya gitmedi; sıradaki hâli güncellenir.
+      final updated = await DatabaseHelper.instance.updatePendingInsert(
+        householdId,
+        kind,
+        id,
+        data,
+      );
+      return updated ? 1 : 0;
+    }
+
+    await syncPendingChanges();
+    if (pendingChangeCount == 0) {
+      try {
+        return await _updateRemote(householdId, kind, id, data);
+      } catch (error) {
+        if (!isNetworkError(error)) rethrow;
+        isOffline = true;
+      }
+    }
+
+    await DatabaseHelper.instance.addPendingOp(
+      PendingSharedOp(
+        householdId: householdId,
+        kind: kind,
+        op: 'update',
+        recordId: id,
+        data: data,
+      ),
+    );
+    await _refreshPendingCount(householdId);
+    return 1;
   }
 
   static Future<int> deleteRecord(String kind, int id) async {
     final householdId = _requireHousehold();
-    final rows = await client!
-        .from('financial_records')
-        .delete()
-        .eq('household_id', householdId)
-        .eq('kind', kind)
-        .eq('id', id)
-        .select('id');
-    return rows.length;
+    id = _resolveId(id);
+    if (id < 0) {
+      // Kayıt henüz sunucuya gitmedi; sıradan çıkarmak yeterli.
+      final removed = await DatabaseHelper.instance.deletePendingOpsForRecord(
+        householdId,
+        kind,
+        id,
+      );
+      await _refreshPendingCount(householdId);
+      return removed > 0 ? 1 : 0;
+    }
+
+    await syncPendingChanges();
+    if (pendingChangeCount == 0) {
+      try {
+        return await _deleteRemote(householdId, kind, id);
+      } catch (error) {
+        if (!isNetworkError(error)) rethrow;
+        isOffline = true;
+      }
+    }
+
+    await DatabaseHelper.instance.addPendingOp(
+      PendingSharedOp(
+        householdId: householdId,
+        kind: kind,
+        op: 'delete',
+        recordId: id,
+      ),
+    );
+    await _refreshPendingCount(householdId);
+    return 1;
   }
 
   static Future<void> updateRealtimeSubscription(
@@ -208,6 +486,26 @@ class SharedBudgetService {
       imported += result.length;
     }
     return imported;
+  }
+
+  /// Kullanıcının hesabını ve sunucudaki verilerini kalıcı olarak siler.
+  /// Ortak bütçede başka üye varsa bütçe onda kalır (bkz.
+  /// supabase/migrations/202610120001_delete_own_account.sql).
+  static Future<void> deleteOwnAccount() async {
+    await client!.rpc('delete_own_account');
+    try {
+      await client!.auth.signOut();
+    } catch (_) {
+      // Hesap silindiği için oturum sunucuda zaten geçersiz.
+    }
+    await DatabaseHelper.instance.clearSharedLocalData();
+    await DatabaseHelper.instance.setActiveHouseholdId(null);
+    await DatabaseHelper.instance.setSharedModeEnabled(false);
+    activeHouseholdId = null;
+    sharedModeEnabled = false;
+    pendingChangeCount = 0;
+    isOffline = false;
+    _sentTempIds.clear();
   }
 
   static String _requireHousehold() {

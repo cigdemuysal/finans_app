@@ -1,4 +1,4 @@
-package com.example.finans_app
+package com.acici.butce
 
 import io.flutter.embedding.android.FlutterActivity
 

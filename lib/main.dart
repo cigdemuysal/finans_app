@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'database_helper.dart';
+import 'formatting.dart';
+import 'settings_page.dart';
 import 'shared_budget_page.dart';
 import 'shared_budget_service.dart';
 import 'tcmb_rates_service.dart';
@@ -405,7 +409,7 @@ class RootPage extends StatefulWidget {
   State<RootPage> createState() => _RootPageState();
 }
 
-class _RootPageState extends State<RootPage> {
+class _RootPageState extends State<RootPage> with WidgetsBindingObserver {
   int currentTab = 0;
 
   bool isLoading = true;
@@ -529,15 +533,37 @@ class _RootPageState extends State<RootPage> {
   double get totalInvestmentProfitLoss =>
       totalInvestmentValue - totalInvestmentCost;
 
+  // Ortak bütçede internet yokken yapılan değişiklikleri bağlantı gelince
+  // göndermek için düzenli aralıklarla tekrar dener.
+  Timer? _sharedSyncTimer;
+
   @override
   void initState() {
     super.initState();
     currentTab = widget.initialTab;
+    WidgetsBinding.instance.addObserver(this);
+    _sharedSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (SharedBudgetService.hasActiveSharedBudget &&
+          (SharedBudgetService.isOffline ||
+              SharedBudgetService.pendingChangeCount > 0)) {
+        loadAll();
+      }
+    });
     loadAll();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        SharedBudgetService.hasActiveSharedBudget) {
+      loadAll();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _sharedSyncTimer?.cancel();
     overviewScrollController.dispose();
     installmentsScrollController.dispose();
     investmentsScrollController.dispose();
@@ -555,7 +581,7 @@ class _RootPageState extends State<RootPage> {
         DatabaseHelper.instance.getIncomes(),
         DatabaseHelper.instance.getInstallments(),
         DatabaseHelper.instance.getInvestments(),
-      ]).timeout(const Duration(seconds: 15));
+      ]).timeout(const Duration(seconds: 30));
 
       if (!mounted) return;
 
@@ -573,6 +599,19 @@ class _RootPageState extends State<RootPage> {
         isLoading = false;
         _loadError = null;
       });
+
+      if (mounted && SharedBudgetService.rejectedChangeCount > 0) {
+        final count = SharedBudgetService.rejectedChangeCount;
+        SharedBudgetService.rejectedChangeCount = 0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'İnternetsizken yapılan $count değişiklik ortak bütçeye '
+              'işlenemedi. Kayıt diğer kişi tarafından silinmiş olabilir.',
+            ),
+          ),
+        );
+      }
 
       if (!_startupRatesChecked && investments.isNotEmpty) {
         _startupRatesChecked = true;
@@ -721,7 +760,7 @@ class _RootPageState extends State<RootPage> {
         return AlertDialog(
           title: const Text('Harcamayı Sil'),
           content: Text(
-            '${expense.amount.toStringAsFixed(2)} ₺ '
+            '${formatMoney(expense.amount)} '
             'tutarındaki ${expense.category} '
             'harcamasını silmek istiyor musun?',
           ),
@@ -787,7 +826,7 @@ class _RootPageState extends State<RootPage> {
         return AlertDialog(
           title: const Text('Geliri Sil'),
           content: Text(
-            '${income.amount.toStringAsFixed(2)} ₺ '
+            '${formatMoney(income.amount)} '
             'tutarındaki ${income.source} '
             'gelirini silmek istiyor musun?',
           ),
@@ -960,7 +999,7 @@ class _RootPageState extends State<RootPage> {
         return AlertDialog(
           title: const Text('Yatırımı Sil'),
           content: Text(
-            '${investment.quantity} ${unitForInvestmentType(investment.type)} '
+            '${formatQuantity(investment.quantity)} ${unitForInvestmentType(investment.type)} '
             '${investment.type} yatırımını silmek istiyor musun?',
           ),
           actions: [
@@ -990,7 +1029,7 @@ class _RootPageState extends State<RootPage> {
 
   Future<void> updateInvestmentPrice(Investment investment) async {
     final controller = TextEditingController(
-      text: investment.currentPrice.toString(),
+      text: formatForInput(investment.currentPrice),
     );
 
     final newPrice = await showDialog<double>(
@@ -1015,9 +1054,7 @@ class _RootPageState extends State<RootPage> {
             ),
             FilledButton(
               onPressed: () {
-                final value = double.tryParse(
-                  controller.text.replaceAll(',', '.'),
-                );
+                final value = parseAmount(controller.text);
                 Navigator.pop(context, value);
               },
               child: const Text('Güncelle'),
@@ -1241,11 +1278,47 @@ class _RootPageState extends State<RootPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Açıcı Budget')),
+      appBar: AppBar(
+        title: const Text('Açıcı Budget'),
+        actions: [
+          IconButton(
+            tooltip: 'Ayarlar',
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => SettingsPage(onDataChanged: loadAll),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (_loadError == null &&
+                    SharedBudgetService.hasActiveSharedBudget &&
+                    (SharedBudgetService.isOffline ||
+                        SharedBudgetService.pendingChangeCount > 0))
+                  MaterialBanner(
+                    leading: const Icon(Icons.cloud_off),
+                    content: Text(
+                      SharedBudgetService.pendingChangeCount > 0
+                          ? 'İnternet bağlantısı yok. '
+                                '${SharedBudgetService.pendingChangeCount} '
+                                'değişiklik telefonda bekliyor, bağlantı '
+                                'gelince ortak bütçeye gönderilecek.'
+                          : 'İnternet bağlantısı yok. Ortak bütçenin son '
+                                'görülen hâli gösteriliyor.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: loadAll,
+                        child: const Text('Tekrar dene'),
+                      ),
+                    ],
+                  ),
                 if (_loadError != null)
                   MaterialBanner(
                     content: Text(_loadError!),
@@ -1411,7 +1484,7 @@ class _RootPageState extends State<RootPage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '${balance.toStringAsFixed(2)} ₺',
+                    formatMoney(balance),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 32,
@@ -1434,7 +1507,7 @@ class _RootPageState extends State<RootPage> {
                             ),
                             const SizedBox(height: 3),
                             Text(
-                              '${totalIncome.toStringAsFixed(2)} ₺',
+                              formatMoney(totalIncome),
                               style: TextStyle(
                                 color: Colors.greenAccent.shade100,
                                 fontSize: 17,
@@ -1458,7 +1531,7 @@ class _RootPageState extends State<RootPage> {
                             ),
                             const SizedBox(height: 3),
                             Text(
-                              '${totalExpense.toStringAsFixed(2)} ₺',
+                              formatMoney(totalExpense),
                               style: TextStyle(
                                 color: Colors.red.shade100,
                                 fontSize: 17,
@@ -1495,7 +1568,7 @@ class _RootPageState extends State<RootPage> {
                         children: [
                           Text('${activeInstallments.length} aktif taksit'),
                           Text(
-                            'Aylık toplam: ${pendingInstallmentTotal.toStringAsFixed(2)} ₺',
+                            'Aylık toplam: ${formatMoney(pendingInstallmentTotal)}',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ],
@@ -1541,8 +1614,7 @@ class _RootPageState extends State<RootPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '${item.amount >= 0 ? '+' : ''}'
-                        '${item.amount.toStringAsFixed(2)} ₺',
+                        formatMoney(item.amount, signed: true),
                         style: TextStyle(
                           color: item.color,
                           fontWeight: FontWeight.bold,
@@ -1642,7 +1714,7 @@ class _RootPageState extends State<RootPage> {
                               '${installment.paidMonths}/${installment.totalMonths} ay ödendi',
                             ),
                             Text(
-                              'Aylık: ${installment.monthlyAmount.toStringAsFixed(2)} ₺',
+                              'Aylık: ${formatMoney(installment.monthlyAmount)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -1653,7 +1725,7 @@ class _RootPageState extends State<RootPage> {
                         Text(
                           installment.isCompleted
                               ? 'Taksit tamamlandı ✓'
-                              : 'Kalan: ${installment.remainingAmount.toStringAsFixed(2)} ₺'
+                              : 'Kalan: ${formatMoney(installment.remainingAmount)}'
                                     ' (${installment.remainingMonths} ay)',
                           style: TextStyle(
                             color: installment.isCompleted
@@ -1725,7 +1797,7 @@ class _RootPageState extends State<RootPage> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '${totalInvestmentValue.toStringAsFixed(2)} ₺',
+                        formatMoney(totalInvestmentValue),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 28,
@@ -1734,8 +1806,7 @@ class _RootPageState extends State<RootPage> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        '${totalInvestmentProfitLoss >= 0 ? '+' : ''}'
-                        '${totalInvestmentProfitLoss.toStringAsFixed(2)} ₺ '
+                        '${formatMoney(totalInvestmentProfitLoss, signed: true)} '
                         'kar/zarar',
                         style: TextStyle(
                           color: totalInvestmentProfitLoss >= 0
@@ -1791,8 +1862,8 @@ class _RootPageState extends State<RootPage> {
                                     ),
                                   ),
                                   Text(
-                                    '${investment.quantity} ${unitForInvestmentType(investment.type)} • '
-                                    'Alış: ${investment.purchasePrice.toStringAsFixed(2)} ₺',
+                                    '${formatQuantity(investment.quantity)} ${unitForInvestmentType(investment.type)} • '
+                                    'Alış: ${formatMoney(investment.purchasePrice)}',
                                   ),
                                 ],
                               ),
@@ -1815,7 +1886,7 @@ class _RootPageState extends State<RootPage> {
                                   style: TextStyle(fontSize: 12),
                                 ),
                                 Text(
-                                  '${investment.currentValue.toStringAsFixed(2)} ₺',
+                                  formatMoney(investment.currentValue),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
@@ -1832,8 +1903,8 @@ class _RootPageState extends State<RootPage> {
                                 ),
                                 Text(
                                   '${isProfit ? '+' : ''}'
-                                  '${investment.profitLoss.toStringAsFixed(2)} ₺ '
-                                  '(${investment.profitLossPercent.toStringAsFixed(1)}%)',
+                                  '${formatMoney(investment.profitLoss)} '
+                                  '(%${formatNumber(investment.profitLossPercent, decimals: 1)})',
                                   style: TextStyle(
                                     color: isProfit ? Colors.green : Colors.red,
                                     fontWeight: FontWeight.bold,
@@ -1858,6 +1929,15 @@ class _RootPageState extends State<RootPage> {
                   ),
                 );
               }),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
+                child: Text(
+                  'Gösterilen fiyatlar bilgi amaçlıdır ve gecikmeli olabilir. '
+                  'Dolar ve euro için TCMB döviz alış kuru kullanılır. '
+                  'Bu uygulama yatırım tavsiyesi vermez.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ),
             ],
           ),
         ),
@@ -1917,7 +1997,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
     super.initState();
 
     amountController = TextEditingController(
-      text: widget.expense?.amount.toString() ?? '',
+      text: inputTextFor(widget.expense?.amount),
     );
 
     descriptionController = TextEditingController(
@@ -1945,7 +2025,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
   }
 
   Future<void> saveExpense() async {
-    final amount = double.tryParse(amountController.text.replaceAll(',', '.'));
+    final amount = parseAmount(amountController.text);
 
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2119,7 +2199,7 @@ class _AddIncomePageState extends State<AddIncomePage> {
 
     sourceController = TextEditingController(text: widget.income?.source ?? '');
     amountController = TextEditingController(
-      text: widget.income?.amount.toString() ?? '',
+      text: inputTextFor(widget.income?.amount),
     );
     descriptionController = TextEditingController(
       text: widget.income?.description ?? '',
@@ -2147,7 +2227,7 @@ class _AddIncomePageState extends State<AddIncomePage> {
 
   void saveIncome() {
     final source = sourceController.text.trim();
-    final amount = double.tryParse(amountController.text.replaceAll(',', '.'));
+    final amount = parseAmount(amountController.text);
 
     if (source.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2306,7 +2386,7 @@ class _AddInstallmentPageState extends State<AddInstallmentPage> {
       text: widget.installment?.title ?? '',
     );
     totalAmountController = TextEditingController(
-      text: widget.installment?.totalAmount.toString() ?? '',
+      text: inputTextFor(widget.installment?.totalAmount),
     );
     totalMonthsController = TextEditingController(
       text: widget.installment?.totalMonths.toString() ?? '',
@@ -2337,9 +2417,7 @@ class _AddInstallmentPageState extends State<AddInstallmentPage> {
 
   void saveInstallment() {
     final title = titleController.text.trim();
-    final totalAmount = double.tryParse(
-      totalAmountController.text.replaceAll(',', '.'),
-    );
+    final totalAmount = parseAmount(totalAmountController.text);
     final totalMonths = int.tryParse(totalMonthsController.text);
     final paidMonths = int.tryParse(paidMonthsController.text) ?? 0;
 
@@ -2543,16 +2621,15 @@ class _AddInvestmentPageState extends State<AddInvestmentPage> {
     super.initState();
 
     quantityController = TextEditingController(
-      text: widget.investment?.quantity.toString() ?? '',
+      text: inputTextFor(widget.investment?.quantity),
     );
     purchasePriceController = TextEditingController(
-      text: widget.investment?.purchasePrice.toString() ?? '',
+      text: inputTextFor(widget.investment?.purchasePrice),
     );
     currentPriceController = TextEditingController(
-      text:
-          widget.investment?.currentPrice.toString() ??
-          widget.investment?.purchasePrice.toString() ??
-          '',
+      text: inputTextFor(
+        widget.investment?.currentPrice ?? widget.investment?.purchasePrice,
+      ),
     );
 
     selectedType = widget.investment?.type ?? 'Altın';
@@ -2576,16 +2653,12 @@ class _AddInvestmentPageState extends State<AddInvestmentPage> {
   }
 
   void saveInvestment() {
-    final quantity = double.tryParse(
-      quantityController.text.replaceAll(',', '.'),
-    );
-    final purchasePrice = double.tryParse(
-      purchasePriceController.text.replaceAll(',', '.'),
-    );
+    final quantity = parseAmount(quantityController.text);
+    final purchasePrice = parseAmount(purchasePriceController.text);
     final currentPriceText = currentPriceController.text.trim();
     final currentPrice = currentPriceText.isEmpty
         ? purchasePrice
-        : double.tryParse(currentPriceText.replaceAll(',', '.'));
+        : parseAmount(currentPriceText);
 
     if (quantity == null || quantity <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(

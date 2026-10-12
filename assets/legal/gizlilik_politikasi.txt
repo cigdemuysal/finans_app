@@ -1,0 +1,56 @@
+AÇICI BUDGET GİZLİLİK POLİTİKASI VE KVKK AYDINLATMA METNİ
+
+Son güncelleme: [TARİH]
+
+Bu metin, Açıcı Budget uygulamasının ("Uygulama") hangi kişisel verileri işlediğini, bu verileri neden işlediğini ve haklarınızı açıklar. 6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") kapsamında veri sorumlusu [GELİŞTİRİCİ ADI SOYADI / ŞİRKET UNVANI]'dır.
+İletişim: [İLETİŞİM E-POSTASI]
+
+1. HANGİ VERİLER İŞLENİR?
+
+a) Yalnızca telefonunuzda saklanan veriler
+Ortak bütçe kullanmadığınızda girdiğiniz gelir, gider, taksit ve yatırım kayıtları yalnızca telefonunuzdaki uygulama veritabanında saklanır. Bu kayıtlar bize veya başka bir sunucuya gönderilmez.
+
+b) Ortak bütçe kullandığınızda sunucuda saklanan veriler
+Ortak bütçe özelliğini kullanmak için hesap oluşturursanız şu veriler Supabase altyapısındaki sunucularda saklanır:
+- E-posta adresiniz ve şifrenizin şifrelenmiş (geri çevrilemez) hâli
+- Ortak bütçeye eklediğiniz gelir, gider, taksit ve yatırım kayıtları
+- Ortak bütçenin adı, üyeleri ve davet kodlarının şifrelenmiş hâli
+- Kayıtların oluşturulma zamanı
+Ortak bütçedeki diğer kişi, bütçedeki kayıtları ve e-posta adresinizi görebilir.
+
+c) Döviz kurları
+Uygulama dolar ve euro kurlarını Türkiye Cumhuriyet Merkez Bankası'nın herkese açık adresinden (tcmb.gov.tr) alır. Bu istekte sizinle ilgili bir bilgi gönderilmez; ancak her internet isteğinde olduğu gibi karşı sunucu IP adresinizi görebilir.
+
+d) Yedek dosyaları
+"Yedek al" özelliğiyle oluşturduğunuz dosya, sizin seçtiğiniz yere (ör. telefon hafızası, Google Drive) kaydedilir. Bu dosyaya erişimimiz yoktur. Dosya şifrelenmez; güvenli bir yerde saklamanız sizin sorumluluğunuzdadır.
+
+2. HANGİ VERİLER İŞLENMEZ?
+Uygulama reklam göstermez, reklam kimliği kullanmaz, konumunuzu, rehberinizi, fotoğraflarınızı veya banka hesaplarınızı okumaz. Kullanım istatistiği veya analiz aracı kullanılmaz. Verileriniz satılmaz ve pazarlama amacıyla paylaşılmaz.
+
+3. VERİLER HANGİ AMAÇLA VE HUKUKİ SEBEPLE İŞLENİR?
+Veriler yalnızca uygulamanın size sunduğu hizmeti (bütçe takibi ve ortak bütçe) yerine getirmek için işlenir. Hukuki sebep, KVKK madde 5/2-c uyarınca sizinle kurulan kullanım ilişkisinin ifası için gerekli olmasıdır.
+
+4. VERİLER KİMLERE AKTARILIR?
+Ortak bütçe verileri, barındırma hizmeti sağlayıcısı Supabase Inc. tarafından işletilen sunucularda saklanır. Sunucular [SUNUCU BÖLGESİ, ör. Avrupa Birliği (Frankfurt)] bölgesindedir. Bu nedenle verileriniz yurt dışına aktarılmış olur; ortak bütçe için hesap açarak bu aktarıma açık rıza vermiş olursunuz (KVKK madde 9). Ortak bütçeyi kullanmazsanız hiçbir veriniz yurt dışına aktarılmaz.
+Yasal bir zorunluluk olmadıkça verileriniz başka hiçbir kişi veya kurumla paylaşılmaz.
+
+5. VERİLER NE KADAR SÜRE SAKLANIR?
+Telefonunuzdaki kayıtlar, siz silene veya uygulamayı kaldırana kadar saklanır.
+Sunucudaki veriler, hesabınızı silene kadar saklanır. Hesabınızı sildiğinizde e-posta adresiniz ve hesabınız hemen silinir. Ortak bütçede başka bir kişi varsa bütçe ve kayıtlar o kişinin kullanımına devam eder; başka kişi yoksa ortak bütçe ve tüm kayıtları da silinir.
+
+6. VERİLERİMİ NASIL SİLERİM?
+- Hesabınızı silmek için: Uygulamada Ortak sekmesi > "Hesabımı sil".
+- Telefonunuzdaki kayıtları silmek için: Ayarlar > "Bu cihazdaki kayıtları sil".
+- Uygulamaya erişiminiz yoksa [İLETİŞİM E-POSTASI] adresine hesabınızın e-posta adresinden yazarak silme talebinde bulunabilirsiniz. Talebiniz en geç 30 gün içinde yerine getirilir.
+
+7. HAKLARINIZ (KVKK MADDE 11)
+Kişisel verilerinizin işlenip işlenmediğini öğrenme, işlenmişse bilgi talep etme, işlenme amacını öğrenme, yurt içinde veya yurt dışında aktarıldığı kişileri bilme, eksik veya yanlış işlenmişse düzeltilmesini, silinmesini veya yok edilmesini isteme, itiraz etme ve zararın giderilmesini talep etme haklarına sahipsiniz. Taleplerinizi [İLETİŞİM E-POSTASI] adresine iletebilirsiniz.
+
+8. GÜVENLİK
+Sunucuyla tüm iletişim şifreli bağlantı (HTTPS) üzerinden yapılır. Ortak bütçe kayıtlarına yalnızca o bütçenin üyeleri erişebilir; bu kural sunucu tarafında da uygulanır.
+
+9. ÇOCUKLAR
+Uygulama 18 yaşından küçükler için tasarlanmamıştır ve bilerek çocuklardan veri toplanmaz.
+
+10. DEĞİŞİKLİKLER
+Bu politika değişirse güncel hâli uygulamada ve [GİZLİLİK POLİTİKASI WEB ADRESİ] adresinde yayımlanır.
