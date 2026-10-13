@@ -24,14 +24,18 @@ Uygulama dolar ve euro kurlarını Türkiye Cumhuriyet Merkez Bankası'nın herk
 d) Yedek dosyaları
 "Yedek al" özelliğiyle oluşturduğunuz dosya, sizin seçtiğiniz yere (ör. telefon hafızası, Google Drive) kaydedilir. Bu dosyaya erişimimiz yoktur. Dosya şifrelenmez; güvenli bir yerde saklamanız sizin sorumluluğunuzdadır.
 
+e) Hata raporları
+Uygulama çöktüğünde veya beklenmedik bir hata oluştuğunda, hatayı düzeltebilmemiz için Sentry hizmetine otomatik bir hata raporu gönderilir. Raporda yalnızca hatanın türü, uygulama kodundaki yeri, uygulama sürümü, cihaz modeli ve işletim sistemi sürümü bulunur. E-posta adresiniz, IP adresiniz, ekran görüntüsü ve girdiğiniz gelir, gider veya yatırım bilgileri rapora eklenmez. Raporlar [SENTRY SAKLAMA SÜRESİ, ör. 90 gün] sonra silinir.
+
 2. HANGİ VERİLER İŞLENMEZ?
-Uygulama reklam göstermez, reklam kimliği kullanmaz, konumunuzu, rehberinizi, fotoğraflarınızı veya banka hesaplarınızı okumaz. Kullanım istatistiği veya analiz aracı kullanılmaz. Verileriniz satılmaz ve pazarlama amacıyla paylaşılmaz.
+Uygulama reklam göstermez, reklam kimliği kullanmaz, konumunuzu, rehberinizi, fotoğraflarınızı veya banka hesaplarınızı okumaz. Kullanım istatistiği toplanmaz; yalnızca yukarıda anlatılan hata raporları gönderilir. Verileriniz satılmaz ve pazarlama amacıyla paylaşılmaz.
 
 3. VERİLER HANGİ AMAÇLA VE HUKUKİ SEBEPLE İŞLENİR?
-Veriler yalnızca uygulamanın size sunduğu hizmeti (bütçe takibi ve ortak bütçe) yerine getirmek için işlenir. Hukuki sebep, KVKK madde 5/2-c uyarınca sizinle kurulan kullanım ilişkisinin ifası için gerekli olmasıdır.
+Veriler yalnızca uygulamanın size sunduğu hizmeti (bütçe takibi ve ortak bütçe) yerine getirmek ve uygulamadaki hataları düzeltmek için işlenir. Hukuki sebep, KVKK madde 5/2-c uyarınca sizinle kurulan kullanım ilişkisinin ifası için gerekli olmasıdır.
 
 4. VERİLER KİMLERE AKTARILIR?
 Ortak bütçe verileri, barındırma hizmeti sağlayıcısı Supabase Inc. tarafından işletilen sunucularda saklanır. Sunucular [SUNUCU BÖLGESİ, ör. Avrupa Birliği (Frankfurt)] bölgesindedir. Bu nedenle verileriniz yurt dışına aktarılmış olur; ortak bütçe için hesap açarak bu aktarıma açık rıza vermiş olursunuz (KVKK madde 9). Ortak bütçeyi kullanmazsanız hiçbir veriniz yurt dışına aktarılmaz.
+Hata raporları, Functional Software, Inc. (Sentry) tarafından [SENTRY VERİ BÖLGESİ, ör. Avrupa Birliği (Frankfurt)] bölgesindeki sunucularda saklanır. Bu raporlar sizi tanımlayan bilgi içermez.
 Yasal bir zorunluluk olmadıkça verileriniz başka hiçbir kişi veya kurumla paylaşılmaz.
 
 5. VERİLER NE KADAR SÜRE SAKLANIR?

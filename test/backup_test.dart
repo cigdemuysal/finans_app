@@ -1,4 +1,4 @@
-import 'package:finans_app/settings_page.dart';
+import 'package:finans_app/pages/settings_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

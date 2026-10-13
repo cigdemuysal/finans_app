@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'crash_reporting.dart';
 import 'database_helper.dart';
 
 /// Supabase backend for optional shared household budgets.
@@ -139,11 +140,12 @@ class SharedBudgetService {
         }
         await DatabaseHelper.instance.deletePendingOp(op.seq!);
         isOffline = false;
-      } catch (error) {
+      } catch (error, stackTrace) {
         if (isNetworkError(error)) {
           isOffline = true;
           break;
         }
+        CrashReporting.report(error, stackTrace);
         // Sunucu bu değişikliği kabul etmedi (ör. kayıt diğer kişi
         // tarafından silinmiş). Tekrar denemek sonucu değiştirmez; sıranın
         // tıkanmaması için değişiklik çıkarılır.

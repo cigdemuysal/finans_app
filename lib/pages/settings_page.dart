@@ -4,8 +4,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'database_helper.dart';
-import 'shared_budget_service.dart';
+import '../services/crash_reporting.dart';
+import '../services/database_helper.dart';
+import '../services/shared_budget_service.dart';
 
 /// Yedekleme, geri yükleme, veri silme ve yasal metinler.
 class SettingsPage extends StatefulWidget {
@@ -70,7 +71,8 @@ class _SettingsPageState extends State<SettingsPage> {
         );
         if (saved == null) return;
         _showMessage('$count kayıt yedeklendi.');
-      } catch (_) {
+      } catch (error, stackTrace) {
+        CrashReporting.report(error, stackTrace);
         _showMessage('Yedek oluşturulamadı. Lütfen tekrar deneyin.');
       }
     });
@@ -130,7 +132,8 @@ class _SettingsPageState extends State<SettingsPage> {
         );
         await widget.onDataChanged();
         _showMessage('$restored kayıt geri yüklendi.');
-      } catch (_) {
+      } catch (error, stackTrace) {
+        CrashReporting.report(error, stackTrace);
         _showMessage(
           'Yedek geri yüklenemedi. Mevcut kayıtlarınız değiştirilmedi.',
         );

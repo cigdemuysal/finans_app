@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'database_helper.dart';
-import 'shared_budget_service.dart';
+import '../services/database_helper.dart';
+import '../services/shared_budget_service.dart';
 
 class SharedBudgetPage extends StatefulWidget {
   const SharedBudgetPage({

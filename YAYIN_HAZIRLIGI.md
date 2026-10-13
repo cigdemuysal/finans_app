@@ -36,8 +36,11 @@ Mağaza dosyasını oluşturmak için:
 ```powershell
 flutter build appbundle --release `
   --dart-define=SUPABASE_URL=https://PROJE.supabase.co `
-  --dart-define=SUPABASE_ANON_KEY=sb_publishable_...
+  --dart-define=SUPABASE_ANON_KEY=sb_publishable_... `
+  --dart-define=SENTRY_DSN=https://...ingest.de.sentry.io/...
 ```
+
+`SENTRY_DSN` satırı 5. adımda anlatılan çökme raporlaması içindir; eklemezsen rapor gönderilmez.
 
 Çıkan dosya: `build/app/outputs/bundle/release/app-release.aab`.
 
@@ -62,13 +65,25 @@ Yapman gerekenler:
 4. Bu adresi Google Play Console'da "Gizlilik politikası" alanına gir.
 5. Metinler bir avukat tarafından kontrol edilmedi. Uygulamadan para kazanmayı planlıyorsan bir avukata baktırman iyi olur.
 
-## 5. Google Play Console ayarları
+## 5. Çökme raporlaması (Sentry)
 
-- **Veri güvenliği formu:** E-posta adresi ve finansal bilgiler (ortak bütçe kullananlar için) toplanıyor, aktarım sırasında şifreleniyor, kullanıcı silme isteğinde bulunabiliyor. Reklam ve analiz yok.
+Uygulama, kullanıcıların telefonunda bir hata olduğunda bunu sana bildirebilir. Bunun için:
+
+1. [sentry.io](https://sentry.io) adresinde ücretsiz hesap aç. Kayıtta veri bölgesi olarak **EU (Frankfurt)** seç.
+2. Yeni proje oluştururken platform olarak **Flutter** seç.
+3. Proje ayarlarında Security & Privacy bölümünden **Prevent Storing of IP Addresses** seçeneğini aç. **Data Scrubber** seçeneğinin açık olduğunu kontrol et.
+4. Proje ayarlarındaki Client Keys (DSN) bölümünden DSN adresini kopyala ve yukarıdaki build komutunda `SENTRY_DSN=` kısmına yapıştır.
+5. Gizlilik metnindeki `[SENTRY VERİ BÖLGESİ]` ve `[SENTRY SAKLAMA SÜRESİ]` alanlarını doldur. Ücretsiz planda saklama süresi 30 gündür.
+
+DSN verilmezse uygulama hiçbir rapor göndermez. Deneme yaparken bunu boş bırakabilirsin.
+
+## 6. Google Play Console ayarları
+
+- **Veri güvenliği formu:** E-posta adresi ve finansal bilgiler (ortak bütçe kullananlar için) ile çökme kayıtları ve tanılama verileri (Sentry açıksa) toplanıyor. Hepsi aktarım sırasında şifreleniyor ve kullanıcı silme isteğinde bulunabiliyor. Reklam ve kullanım analizi yok.
 - **Hesap silme bağlantısı:** Play Console bir web adresi de istiyor. Gizlilik politikası sayfasındaki "Verilerimi nasıl silerim?" bölümü bu iş için kullanılabilir.
 - **Kapalı test:** Yeni kişisel geliştirici hesaplarında herkese açık yayından önce en az 12 kişiyle 14 gün kapalı test şartı var.
 
-## 6. Yayından önce telefonda dene
+## 7. Yayından önce telefonda dene
 
 1. İnternet açıkken ortak bütçeye bir gider ekle, diğer telefonda göründüğünü kontrol et.
 2. Uçak modunu aç, gider ekle ve sil. Üstte "İnternet bağlantısı yok" uyarısı çıkmalı.

@@ -1,4 +1,4 @@
-import 'package:finans_app/formatting.dart';
+import 'package:finans_app/utils/formatting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
